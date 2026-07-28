@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#17151d">
+  <meta name="description" content="CORTIS 恋爱模拟器——虚构平行世界互动小说">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="stylesheet" href="style.css">
+  <title>CORTIS · 恋爱模拟器</title>
+</head>
+<body>
+  <main class="app-shell">
+    <section id="onboarding" class="screen onboarding">
+      <div class="brand"><span class="eyebrow">FICTIONAL STORY MODE</span><h1>CORTIS<span>·</span>恋爱模拟器</h1><p>Color outside the lines</p></div>
+      <div class="notice">这是完全虚构的平行世界故事。角色均为成年设定，剧情不对应现实人物或事件。</div>
+      <form id="setup-form">
+        <div class="form-head"><span>01</span><h2>建立你的角色</h2></div>
+        <label>姓名<input id="player-name" required maxlength="18" placeholder="输入你的名字"></label>
+        <div class="two-col"><label>年龄<input id="player-age" required type="number" min="18" max="99" placeholder="18+"></label><label>国籍<input id="player-country" required maxlength="16" placeholder="例如：中国"></label></div>
+        <label>性格<input id="player-traits" required maxlength="30" placeholder="例如：慢热、敏锐、嘴硬"></label>
+        <label>职业<select id="player-job"><option>同公司练习生</option><option>已出道艺人</option><option>造型师</option><option>咖啡店兼职生</option><option>编舞师</option><option value="custom">自定义</option></select></label>
+        <label id="custom-job-wrap" hidden>自定义职业<input id="custom-job" maxlength="24" placeholder="你的职业"></label>
+        <label>外貌特点／风格 <em>可选</em><input id="player-style" maxlength="40" placeholder="例如：旧牛仔外套、胶片相机"></label>
+        <div class="form-head choice-head"><span>02</span><h2>选择故事主角</h2><small>可多选，未选择成员仅作为好友出现</small></div>
+        <div id="member-picker" class="member-picker"></div>
+        <button class="primary" type="submit">确认设定，进入故事 <b>→</b></button>
+      </form>
+    </section>
+
+    <section id="story" class="screen story" hidden>
+      <header class="topbar"><button id="back-btn" class="icon-btn" aria-label="返回设定">‹</button><div><span id="day-label">周二</span><strong>Chapter 01</strong></div><button id="save-btn" class="icon-btn" aria-label="保存进度">⌑</button></header>
+      <div class="story-meta"><span id="time-label">07:48</span><i></i><span id="place-label">HYBE 练习室 B</span></div>
+      <article id="narrative" class="narrative"></article>
+      <section id="phone-card" class="phone-card" hidden></section>
+      <section class="choices"><p>接下来你打算怎么做？</p><div id="choice-list"></div><button id="custom-toggle" class="custom-link">✦ 自定义行动</button><div id="custom-action" class="custom-action" hidden><input id="custom-input" maxlength="100" placeholder="写下你的行动…"><button id="custom-send">发送</button></div></section>
+      <section class="stats"><div class="stat-title"><span>▣</span> 本次变化</div><div id="delta-list"></div><div class="inventory">背包：<span id="bag">空</span>　｜　通讯录：<span id="contacts">无</span>　｜　解锁 CG：<span id="cg">0</span></div></section>
+      <nav class="bottom-nav"><button class="active" data-panel="story">✦<span>故事</span></button><button data-panel="profile">◎<span>档案</span></button><button data-panel="stats">⌁<span>数值</span></button></nav>
+    </section>
+  </main>
+  <dialog id="panel-dialog"><button id="close-dialog" class="close">×</button><div id="dialog-content"></div></dialog>
+  <script src="app.js"></script>
+</body>
+</html>
