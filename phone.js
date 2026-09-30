@@ -57,7 +57,11 @@ var SCREENS = ['lockscreen', 'onboarding', 'home', 'story', 'app-wechat', 'app-p
 function show(id) {
   SCREENS.forEach(function (s) {
     var el = document.getElementById(s);
-    if (el) el.hidden = (s !== id);
+    if (el) {
+      var on = (s === id);
+      el.hidden = !on;
+      el.style.display = on ? '' : 'none'; // 内联样式兜底：旧缓存 CSS 也能正确隐藏
+    }
   });
   window.scrollTo(0, 0);
 }
@@ -679,7 +683,10 @@ function wire() {
     show('onboarding');
   } else {
     show('lockscreen');
-    $('#lockscreen').addEventListener('click', function () { show('onboarding'); });
+    var lk = $('#lockscreen');
+    var unlock = function () { show('onboarding'); };
+    lk.addEventListener('click', unlock);
+    lk.addEventListener('touchend', function (e) { e.preventDefault(); unlock(); });
   }
   tickClock();
   setInterval(tickClock, 20000);

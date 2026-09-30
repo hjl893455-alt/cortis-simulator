@@ -541,7 +541,9 @@ function spawnDanmaku(name, text, sys) {
 
 /* ---------- 房间面板 / 聊天（房主客人共用） ---------- */
 function openRoomPanel() {
-  $('#room-panel').hidden = false;
+  var p = $('#room-panel');
+  p.hidden = false;
+  p.style.display = '';
   $('#room-fab').hidden = false;
 }
 function renderMembers() {
@@ -680,7 +682,7 @@ function wireOnboarding() {
     p.hidden = !p.hidden;
     if (!p.hidden) { Netplay.chatUnread = 0; $('#chat-badge').hidden = true; }
   };
-  $('#room-close').onclick = function () { $('#room-panel').hidden = true; };
+  $('#room-close').onclick = function () { var p = $('#room-panel'); p.hidden = true; p.style.display = 'none'; };
   Array.prototype.forEach.call(document.querySelectorAll('.room-tab'), function (tab) {
     tab.onclick = function () {
       document.querySelectorAll('.room-tab').forEach(function (x) { x.classList.remove('active'); });
