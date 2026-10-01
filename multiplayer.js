@@ -515,6 +515,12 @@ function spawnDanmaku(name, text, sys) {
   if (!danmakuEnabled()) return;
   if (Netplay.mode !== 'host' && Netplay.mode !== 'guest') return;
   if ($('#story').hidden) return;
+  var densEl = $('#danmaku-density');
+  var dens = densEl ? densEl.value : 'mid'; // low 少量 / mid 中等 / high 满屏，纯本地显示偏好
+  if (!sys) {
+    var keepP = dens === 'low' ? 0.35 : dens === 'high' ? 1 : 0.7;
+    if (Math.random() > keepP) return;
+  }
   var layer = $('#danmaku-layer');
   if (!layer) return;
   var now = Date.now(), lane = 0, oldest = -1;
@@ -703,6 +709,8 @@ function wireOnboarding() {
   $('#chat-send').onclick = sendChat;
   var dsw = $('#danmaku-switch');
   if (dsw) dsw.onchange = function () { toast(dsw.checked ? '弹幕已开启' : '弹幕已关闭'); };
+  var dden = $('#danmaku-density');
+  if (dden) dden.onchange = function () { toast('弹幕密度：' + dden.options[dden.selectedIndex].text); };
   $('#chat-text').addEventListener('keydown', function (e) {
     if (e.key === 'Enter') { e.preventDefault(); sendChat(); }
   });

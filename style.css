@@ -57,6 +57,7 @@ body.np-guest #back-btn,body.np-guest #save-btn{display:none}
 .danmaku.sys{font-size:11px;color:#cfc9d6;background:transparent;text-shadow:0 1px 2px #000}
 .danmaku-toggle{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted);cursor:pointer;font-weight:400}
 .danmaku-toggle input{width:auto;margin:0;accent-color:var(--lime)}
+.danmaku-density{background:#353040;border:1px solid var(--line);color:var(--ink);border-radius:6px;font-size:11px;padding:4px 6px;margin:0}
 
 /* ===== 手机系统：状态栏 / 锁屏 / 主屏幕 ===== */
 #statusbar{display:none}
@@ -157,3 +158,38 @@ body.phone-on .screen{padding-top:34px}
 .photo-item small{display:block;color:var(--muted);font-size:10px;padding:0 10px 10px}
 .photo-item.locked{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:190px;gap:6px}
 .photo-lock{font-size:34px;opacity:.5}
+
+/* ===== 手感/动效升级 ===== */
+/* 1. 按压反馈 */
+button,.choice,.app-icon,.dial-key{transition:transform .15s ease}
+button:active,.choice:active,.app-icon:active,.dial-key:active{transform:scale(.96)}
+/* 2. 页面切换 */
+.screen:not([hidden]){animation:screenIn .28s ease}
+@keyframes screenIn{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:translateY(0)}}
+/* 3. 消息滑入 */
+.wx-msg,.chat-msg{animation:msgIn .25s ease}
+@keyframes msgIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+/* 4a. 选项倾向暗示小字 */
+.choice-hint{display:block;padding-left:28px;color:#c9a8b6;font-size:11px;margin-top:5px}
+/* 4b. 好感飘字 */
+.affection-float{position:fixed;left:50%;top:38%;transform:translateX(-50%);z-index:200;pointer-events:none;font:700 22px 'DM Mono','Noto Sans SC',sans-serif;color:var(--coral);text-shadow:0 2px 12px #000a;animation:affloat 1.3s ease forwards}
+@keyframes affloat{0%{opacity:0;transform:translate(-50%,0)}18%{opacity:1}100%{opacity:0;transform:translate(-50%,-60px)}}
+
+
+/* ===== 第二轮：手感/动效 ===== */
+/* 1. 羁绊天数（I4） */
+.bond-days{text-align:center;font-size:12px;color:var(--coral);margin:18px 0 6px;letter-spacing:1px}
+
+/* 2. 锁定选项（I5）：对标 .choice 的自足样式，置灰 */
+.choice-locked{width:100%;text-align:left;color:var(--muted);border:1px dashed var(--line);background:transparent;margin:7px 0;padding:13px 12px;border-radius:7px;font:13px 'Noto Sans SC';opacity:.65;cursor:not-allowed;transition:transform .15s ease}
+.choice-locked b{display:inline-grid;place-items:center;width:20px;height:20px;border-radius:50%;font:10px 'DM Mono';background:#433b4c;color:var(--muted);margin-right:8px}
+
+/* 3. 爱心粒子（I6） */
+.heart-particle{position:fixed;z-index:300;pointer-events:none;font-size:18px;color:var(--coral);text-shadow:0 0 10px #ff987d80;animation:heartBurst 1s ease-out forwards}
+@keyframes heartBurst{0%{opacity:0;transform:translate(0,0) scale(.4)}22%{opacity:1}100%{opacity:0;transform:translate(var(--dx),var(--dy)) scale(1.1)}}
+
+/* 4. 弹幕层限高：裁掉 320px 以下部分，避开下方选项区 */
+#danmaku-layer{height:320px;bottom:auto}
+
+/* 5. 故事页英文花字装饰 */
+#narrative::before{content:"Between Us";display:block;font:italic 600 24px 'Playfair Display',serif;color:var(--violet);opacity:.35;margin:0 0 12px;letter-spacing:2px}
