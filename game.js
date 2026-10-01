@@ -35,6 +35,8 @@ var state = (function () {
   if (!s.stats || typeof s.stats !== 'object') s.stats = def.stats;
   if (!s.affection || typeof s.affection !== 'object') s.affection = {};
   if (!s.chat || typeof s.chat !== 'object') s.chat = {};
+  if (!s.player || typeof s.player !== 'object') s.player = {};
+  if (typeof s.player.gender !== 'string') s.player.gender = ''; /* v10 新增：旧存档增量补字段 */
   return s;
 })();
 function save() {
@@ -109,6 +111,31 @@ function sceneTrio(mid, idx) {
   return arr[(idx - 1) % arr.length] || { pill: '', open: '嗨，在吗？', hint: '' };
 }
 
+/* ---------- v10：动态 Tab 预置数据（数组顺序即时间流顺序） ---------- */
+var FEED_QUICK_CMT = ['抱抱你', '你真棒', '一直在你身边'];
+var FEED_DATA = [
+  { id: 'james-0', mid: 'james', time: '1小时前', emoji: '🌙', text: '加练结束。深夜的练习室只剩我一个人，居然有点舍不得走。', unlock: 0, likes: 128 },
+  { id: 'keonho-0', mid: 'keonho', time: '2小时前', emoji: '🍜', text: '练完舞的拉面，是全世界最好吃的拉面！', unlock: 0, likes: 342 },
+  { id: 'juhoon-0', mid: 'juhoon', time: '3小时前', emoji: '🎧', text: '新歌的副歌写完了。循环了47遍，还是不满意。', unlock: 0, likes: 96 },
+  { id: 'seong-0', mid: 'seong', time: '4小时前', emoji: '🍢', text: '关东煮第二串比第一串好吃，这是真理。不接受反驳。', unlock: 0, likes: 215 },
+  { id: 'martin-0', mid: 'martin', time: '5小时前', emoji: '📋', text: '明天的行程表对了三遍。队长这个身份，真是操心的命。', unlock: 0, likes: 187 },
+  { id: 'james-1', mid: 'james', time: '昨天 21:40', emoji: '🥛', text: '便利店的热牛奶，第二瓶永远比第一瓶好喝。', unlock: 0, likes: 154 },
+  { id: 'martin-1', mid: 'martin', time: '昨天 18:30', emoji: '☕', text: '排练间隙的咖啡，苦得刚刚好。', unlock: 0, likes: 143 },
+  { id: 'keonho-1', mid: 'keonho', time: '昨天 20:12', emoji: '✨', text: '今天被哥夸了！开心到转圈圈！', unlock: 0, likes: 398 },
+  { id: 'seong-1', mid: 'seong', time: '昨天 22:08', emoji: '🎤', text: '今天的高音一次就过。哼，我就说我可以。', unlock: 0, likes: 267 },
+  { id: 'juhoon-1', mid: 'juhoon', time: '昨天 23:15', emoji: '❄️', text: '天台风很大。站了一会儿，把烦心事都吹走了。', unlock: 0, likes: 118 },
+  { id: 'james-2', mid: 'james', time: '昨天 12:05', emoji: '☔', text: '雨天。伞借出去了，淋点雨也挺清醒的。', unlock: 40, likes: 176 },
+  { id: 'keonho-2', mid: 'keonho', time: '2天前', emoji: '🎮', text: '新游戏开荒成功！谁要一起排位，我带飞！', unlock: 40, likes: 284 },
+  { id: 'martin-2', mid: 'martin', time: '2天前', emoji: '🤝', text: '队员们都很好。有你们在，这个团才完整。', unlock: 40, likes: 321 },
+  { id: 'seong-2', mid: 'seong', time: '3天前', emoji: '🧥', text: '外套借出去了，有点冷。……才不是因为担心你。', unlock: 40, likes: 289 },
+  { id: 'juhoon-2', mid: 'juhoon', time: '2天前', emoji: '🎹', text: '这段旋律只给你听过。别告诉别人。', unlock: 40, likes: 203 },
+  { id: 'james-3', mid: 'james', time: '3天前', emoji: '💌', text: '有些话当面说不出口，就先写在这里吧——谢谢你一直都在。', unlock: 70, likes: 412 },
+  { id: 'keonho-3', mid: 'keonho', time: '4天前', emoji: '💝', text: '偷偷说：粉丝的信我都留着，一封没扔。', unlock: 70, likes: 527 },
+  { id: 'juhoon-3', mid: 'juhoon', time: '4天前', emoji: '🌌', text: '如果哪天我不在舞台上了，你还会记得我吗。', unlock: 70, likes: 356 },
+  { id: 'martin-3', mid: 'martin', time: '5天前', emoji: '🏆', text: '出道那天的奖杯擦了又擦。下一个目标，已经在路上了。', unlock: 70, likes: 489 },
+  { id: 'seong-3', mid: 'seong', time: '6天前', emoji: '🌃', text: '天台的夜景很好看。下次……带你一起看也不是不行。', unlock: 70, likes: 374 }
+];
+
 var Game = {
   mid: null,
   _docked: false,
@@ -172,9 +199,11 @@ var Game = {
     try { if (W.ensureWxScore) W.ensureWxScore(); } catch (e) {}
     this.ensureChat();
     this.wireDock();
+    this.wireTabs();
     var mid = (state.chosen && state.chosen[0]) || 'james';
     if (!this.chatOf(mid)) mid = 'james';
     this.selectMember(mid);
+    this.switchTab('chat');
   },
 
   selectMember: function (mid) {
@@ -457,6 +486,228 @@ var Game = {
       n++;
       if (n >= 6) clearInterval(iv);
     }, 350);
+  },
+
+  /* ---------- v10：动态 Tab ---------- */
+  /* 预置动态：数组顺序即时间流顺序；unlock>0 的按好感度解锁 */
+  /* （FEED 数据定义在文件尾部 FEED_DATA 处） */
+
+  feedKey: function (id) { return 'f:' + id; },
+  ensureFeed: function () {
+    if (!state.feed || typeof state.feed !== 'object') state.feed = {};
+  },
+  feedOf: function (id) {
+    this.ensureFeed();
+    var k = this.feedKey(id);
+    if (!state.feed[k] || typeof state.feed[k] !== 'object') state.feed[k] = { liked: false, comments: [] };
+    var f = state.feed[k];
+    if (typeof f.liked !== 'boolean') f.liked = false;
+    if (!Array.isArray(f.comments)) f.comments = [];
+    return f;
+  },
+
+  /* 好感加分通道：钳制 0-100，同步 state.affection，刷新头/栏/快捷，头像心情四档自动跟随 */
+  addAff: function (mid, delta) {
+    var c = this.chatOf(mid);
+    if (!c) return 0;
+    c.aff = this.clampAff(c.aff + delta);
+    if (!state.affection) state.affection = {};
+    state.affection[mid] = c.aff;
+    save();
+    if (mid === this.mid) { this.renderHead(); this.renderBar(); this.renderQuick(); }
+    this.maybeMilestone(mid);
+    return c.aff;
+  },
+
+  renderFeed: function () {
+    var list = document.getElementById('feed-list');
+    if (!list) return;
+    var self = this;
+    list.innerHTML = '';
+    FEED_DATA.forEach(function (p) {
+      var m = self.memberOf(p.mid);
+      var c = self.chatOf(p.mid);
+      var aff = c ? c.aff : 0;
+      var art = document.createElement('article');
+      art.className = 'feed-post';
+      /* 未解锁：只显示锁定卡 */
+      if (p.unlock > 0 && aff < p.unlock) {
+        var lk = document.createElement('div');
+        lk.className = 'feed-lock';
+        lk.innerHTML = '<span class="lk">🔒</span>' + esc('与' + (m ? m.name : '') + '的好感达到 ' + p.unlock + ' 解锁');
+        art.appendChild(lk);
+        list.appendChild(art);
+        return;
+      }
+      var st = self.feedOf(p.id);
+      /* 头：头像 + 名字 + 时间 */
+      var ph = document.createElement('div'); ph.className = 'feed-ph';
+      var av = document.createElement('span'); av.className = 'feed-av'; av.textContent = self.faceOf(p.mid);
+      var tt = document.createElement('div');
+      var b = document.createElement('b'); b.textContent = m ? m.name : '';
+      var sm = document.createElement('small'); sm.textContent = p.time;
+      tt.appendChild(b); tt.appendChild(sm);
+      ph.appendChild(av); ph.appendChild(tt);
+      art.appendChild(ph);
+      /* 文案 + 配图 emoji 大字 */
+      var tx = document.createElement('p'); tx.className = 'feed-text'; tx.textContent = p.text;
+      art.appendChild(tx);
+      var em = document.createElement('div'); em.className = 'feed-emoji'; em.textContent = p.emoji;
+      art.appendChild(em);
+      /* 点赞 / 评论按钮 */
+      var acts = document.createElement('div'); acts.className = 'feed-actions';
+      var like = document.createElement('button'); like.type = 'button';
+      var paintLike = function () {
+        like.className = 'feed-like' + (st.liked ? ' liked' : '');
+        like.textContent = (st.liked ? '❤️ ' : '🤍 ') + (p.likes + (st.liked ? 1 : 0));
+      };
+      paintLike();
+      like.onclick = function () {
+        if (st.liked) return;
+        st.liked = true; save();
+        self.addAff(p.mid, 1);
+        paintLike();
+        try { popHearts(window.innerWidth / 2, window.innerHeight * 0.4); } catch (_) {}
+      };
+      var cbtn = document.createElement('button'); cbtn.type = 'button'; cbtn.className = 'feed-cbtn';
+      acts.appendChild(like); acts.appendChild(cbtn);
+      art.appendChild(acts);
+      /* 评论提交（每条动态限一次） */
+      var doComment = function (txt) {
+        txt = String(txt || '').trim().slice(0, 60);
+        if (!txt || st.comments.length) return;
+        st.comments.push(txt); save();
+        self.addAff(p.mid, 2);
+        self.renderFeed();
+      };
+      /* 已有评论展示 */
+      if (st.comments.length) {
+        var cl = document.createElement('div'); cl.className = 'feed-comments';
+        st.comments.forEach(function (ct) {
+          var d = document.createElement('div'); d.className = 'feed-cmt';
+          var nm = document.createElement('b');
+          nm.textContent = ((state.player && state.player.name) ? state.player.name : '我') + '：';
+          d.appendChild(nm);
+          d.appendChild(document.createTextNode(ct));
+          cl.appendChild(d);
+        });
+        art.appendChild(cl);
+        cbtn.textContent = '💬 已评论';
+        cbtn.disabled = true;
+      } else {
+        cbtn.textContent = '💬 评论';
+        var box = document.createElement('div'); box.className = 'feed-cmtbox'; box.hidden = true;
+        var qc = document.createElement('div'); qc.className = 'feed-qc';
+        FEED_QUICK_CMT.forEach(function (q) {
+          var qb = document.createElement('button'); qb.type = 'button'; qb.textContent = q;
+          qb.onclick = function () { doComment(q); };
+          qc.appendChild(qb);
+        });
+        box.appendChild(qc);
+        var fm = document.createElement('div'); fm.className = 'feed-cform';
+        var inp = document.createElement('input');
+        inp.maxLength = 60; inp.placeholder = '写点暖心的话…';
+        var sb = document.createElement('button'); sb.type = 'button'; sb.textContent = '发送';
+        sb.onclick = function () { doComment(inp.value); };
+        inp.addEventListener('keydown', function (e) {
+          if (e.key === 'Enter') { e.preventDefault(); doComment(inp.value); }
+        });
+        fm.appendChild(inp); fm.appendChild(sb);
+        box.appendChild(fm);
+        art.appendChild(box);
+        cbtn.onclick = function () { box.hidden = !box.hidden; if (!box.hidden) { try { inp.focus(); } catch (_) {} } };
+      }
+      list.appendChild(art);
+    });
+  },
+
+  /* ---------- v10：我的 Tab ---------- */
+  bondDays: function () {
+    var days = 1;
+    try {
+      if (state.firstDay) {
+        days = Math.floor((Date.now() - state.firstDay) / 86400000) + 1;
+        if (days < 1) days = 1;
+      }
+    } catch (e) {}
+    return days;
+  },
+  renderMe: function () {
+    var self = this;
+    var nm = document.getElementById('me-name');
+    var sub = document.getElementById('me-sub');
+    var pname = (state.player && state.player.name) || '我';
+    var gender = (state.player && state.player.gender) || '';
+    if (nm) nm.textContent = pname;
+    var av = document.getElementById('me-ava');
+    if (av) av.textContent = gender === '女' ? '🙋‍♀️' : (gender === '男' ? '🙋‍♂️' : '🙂');
+    if (sub) sub.textContent = (gender ? gender + ' · ' : '') + '羁绊第 ' + this.bondDays() + ' 天';
+    var box = document.getElementById('me-afflist');
+    if (box) {
+      box.innerHTML = '';
+      members.forEach(function (m) {
+        var c = self.chatOf(m.id);
+        var aff = c ? c.aff : 0;
+        var row = document.createElement('div');
+        row.className = 'me-affrow';
+        var fav = document.createElement('span'); fav.className = 'feed-av'; fav.textContent = self.faceOf(m.id);
+        var main = document.createElement('div'); main.className = 'me-affmain';
+        var t = document.createElement('b'); t.textContent = m.name + ' · ' + m.en;
+        var tr = document.createElement('div'); tr.className = 'me-track';
+        var fl = document.createElement('div'); fl.className = 'me-fill'; fl.style.width = aff + '%';
+        tr.appendChild(fl);
+        main.appendChild(t); main.appendChild(tr);
+        var num = document.createElement('span'); num.className = 'me-num'; num.textContent = aff + '/100';
+        row.appendChild(fav); row.appendChild(main); row.appendChild(num);
+        row.onclick = function () { self.switchTab('chat'); self.selectMember(m.id); };
+        box.appendChild(row);
+      });
+    }
+  },
+
+  /* ---------- v10：底部 Tab 切换 ---------- */
+  switchTab: function (name) {
+    var self = this;
+    ['chat', 'feed', 'me'].forEach(function (n) {
+      var p = document.getElementById('tab-' + n);
+      if (p) p.hidden = (n !== name);
+    });
+    var btns = document.querySelectorAll('#g-tabs button');
+    Array.prototype.forEach.call(btns, function (b) {
+      b.classList.toggle('active', b.getAttribute('data-tab') === name);
+    });
+    if (name === 'feed') self.renderFeed();
+    else if (name === 'me') self.renderMe();
+    else { self.renderBar(); self.renderHead(); self.renderFlow(); self.renderQuick(); }
+  },
+  wireTabs: function () {
+    if (this._tabbed) return;
+    this._tabbed = true;
+    var self = this;
+    var btns = document.querySelectorAll('#g-tabs button');
+    Array.prototype.forEach.call(btns, function (b) {
+      b.onclick = function () { self.switchTab(b.getAttribute('data-tab')); };
+    });
+    var rs = document.getElementById('me-resetup');
+    if (rs) rs.onclick = function () {
+      var g = document.getElementById('game');
+      if (g) g.hidden = true;
+      var ob = document.getElementById('onboarding');
+      if (ob) ob.hidden = false;
+      try { window.scrollTo(0, 0); } catch (_) {}
+    };
+    var mc = document.getElementById('me-clear');
+    if (mc) mc.onclick = function () {
+      if (!window.confirm('确定要清空全部聊天记录吗？\n（好感度会保留）')) return;
+      members.forEach(function (m) {
+        var c = self.chatOf(m.id);
+        if (c) c.msgs = [];
+      });
+      save();
+      self.renderFlow();
+      var W = window.WxCore || {};
+      if (W.toast) W.toast('聊天记录已清空');
+    };
   },
 
   /* 输入区接线：回车发送、Shift+回车换行、maxlength 200、场景切换、里程碑关闭 */
