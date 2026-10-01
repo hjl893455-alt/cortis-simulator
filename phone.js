@@ -67,7 +67,37 @@ function show(id) {
 }
 function goHome() {
   show('home');
+  ensureFirstDay();
   renderHomeBadges();
+  updateBondDays();
+}
+/* ---- 羁绊天数计数器：state.firstDay 为存档时间戳，老存档防御性补设 ---- */
+function ensureFirstDay() {
+  try {
+    if (typeof state === 'undefined' || !state) return;
+    if (!state.firstDay) {
+      state.firstDay = Date.now();
+      try { localStorage.setItem('cortis-save', JSON.stringify(state)); } catch (e2) {}
+    }
+  } catch (e) {}
+}
+/* 在 #home 的 .home-clock 后面创建 <div class="bond-days">，文本如 "💞 羁绊第 X 天" */
+function updateBondDays() {
+  var days = 1;
+  try {
+    if (typeof state === 'undefined' || !state || !state.firstDay) return;
+    days = Math.floor((Date.now() - state.firstDay) / 86400000) + 1;
+    if (days < 1) days = 1;
+  } catch (e) { return; }
+  var el = document.querySelector('.bond-days');
+  if (!el) {
+    var clock = document.querySelector('#home .home-clock');
+    if (!clock || !clock.parentNode) return;
+    el = document.createElement('div');
+    el.className = 'bond-days';
+    clock.parentNode.insertBefore(el, clock.nextSibling);
+  }
+  el.textContent = '💞 羁绊第 ' + days + ' 天';
 }
 function openApp(name) {
   if (name === 'story') { show('story'); return; }
@@ -140,6 +170,7 @@ function renderThreadList() {
     b.onclick = function () { openThread(tid); };
     list.appendChild(b);
   });
+  maybeProactive(null);
 }
 function openThread(tid) {
   currentThread = tid;
@@ -150,6 +181,7 @@ function openThread(tid) {
   unread[tid] = 0;
   renderMsgs();
   renderHomeBadges();
+  maybeProactive(tid);
 }
 function renderMsgs() {
   var box = $('#wx-msgs');
@@ -199,22 +231,32 @@ function sendWx() {
   if (!text || !currentThread) return;
   if (guestMode) { toast('客人模式下不能发微信哦'); return; }
   input.value = '';
-  threads[currentThread].push({ me: true, text: text, ts: gameClock() });
+  var tid = currentThread;
+  threads[tid].push({ me: true, text: text, ts: gameClock() });
   renderMsgs();
-  if (currentThread === 'group') { groupReply(text); return; }
-  var mid = currentThread.replace(/^dm:/, '');
+  if (tid === 'group') { groupReply(text); return; }
+  var mid = tid.replace(/^dm:/, '');
   var box = $('#wx-msgs');
   var typing = document.createElement('div');
   typing.className = 'wx-msg them';
-  typing.innerHTML = '<span class="wx-avatar sm">' + esc(threadMeta[currentThread].name.charAt(0)) +
+  typing.innerHTML = '<span class="wx-avatar sm">' + esc(threadMeta[tid].name.charAt(0)) +
     '</span><div class="wx-bubble typing"><i></i><i></i><i></i></div>';
+  var reply = botReply(mid, text);
   setTimeout(function () {
-    if (currentThread) { box.appendChild(typing); box.scrollTop = box.scrollHeight; }
+    if (currentThread === tid && box) { box.appendChild(typing); box.scrollTop = box.scrollHeight; }
   }, 600);
+  /* 输入中指示器按回复长度随机化，保留到第一条气泡发出 */
   setTimeout(function () {
     if (typing.parentNode) typing.parentNode.removeChild(typing);
-    pushIM(currentThread, mid, botReply(mid, text));
-  }, 1400 + Math.random() * 1400);
+    deliverReply(tid, mid, reply);
+  }, typingDelay(Array.isArray(reply) ? reply.join('') : reply));
+}
+/* 输入中指示器时长：短句约 0.8 秒，长句可到 2.5 秒+随机 */
+function typingDelay(text) {
+  var len = String(text || '').length;
+  if (len <= 8) return 800 + Math.random() * 600;
+  if (len <= 20) return 1400 + Math.random() * 900;
+  return 2200 + Math.random() * 1400;
 }
 
 /* ---- 微信回复引擎：关键词 + 好感/地点/时间上下文 ---- */
@@ -225,9 +267,72 @@ var FALLBACK = {
   seong: ['哼，算你有眼光', '才、才不是关心你', '知道了啦'],
   keonho: ['嘿嘿', '真的吗？', '好开心呀'],
 };
+/* ---- 第二轮：NPC 五档态度 + 三段式回复 ---- */
+function affectionTier(aff) {
+  var a = Number(aff) || 0;
+  if (a >= 60) return 'active';   /* 积极 */
+  if (a >= 40) return 'friendly'; /* 友好 */
+  if (a >= 20) return 'hesitant'; /* 迟疑 */
+  if (a >= 5) return 'cold';      /* 冷淡 */
+  return 'leave';                 /* 离开 */
+}
+function affectionTierOf(mid) {
+  var aff = 0;
+  try { aff = (state.affection && state.affection[mid]) || 0; } catch (e) {}
+  return affectionTier(aff);
+}
+/* 积极/友好档第 2 条：分享自己的一点事（回应—分享—问一句） */
+var TIER_SHARE = {
+  james: ['刚刚练舞出了一身汗，洗完澡才看到手机', '中午吃了超好吃的三明治，下次带你一起去'],
+  juhoon: ['刚才写了一段旋律，感觉还不错', '耳机里单曲循环了一整个下午'],
+  martin: ['今天加练了半小时，现在浑身酸', '刚给成员们买了饮料，大家都挺开心的'],
+  seong: ['哼，刚才被经纪人说了两句', '今天自拍居然还挺好看的，罕见'],
+  keonho: ['刚才偷吃了经纪人的零食，嘿嘿', '今天练舞被老师夸了，超开心'],
+};
+/* 积极/友好档第 3 条：反问一句 */
+var TIER_ASK = {
+  james: ['你呢，今天过得怎么样？', '你吃晚饭了吗？', '最近忙不忙呀？'],
+  juhoon: ['你呢，在干嘛？', '你平时喜欢听什么歌？'],
+  martin: ['你最近还好吗？', '累了就跟我说，别硬撑'],
+  seong: ['喂，你呢？', '你今天都干嘛了？'],
+  keonho: ['你呢你呢？', '想听我唱歌吗？'],
+};
+/* 离开档：终结话题式短句，不再追问 */
+var TIER_LEAVE = {
+  james: '我先忙了',
+  juhoon: '…先这样',
+  martin: '我先去忙了',
+  seong: '走了',
+  keonho: '先撤啦',
+};
+/* 冷淡档：言简意赅、不提问的单条短气泡 */
+function coldShort(text) {
+  var s = String(text || '').split(/[？?!！…]/)[0];
+  s = s.replace(/[，。、；：,.]+$/g, '').slice(0, 10);
+  return s || '嗯';
+}
+/* 档位组装：返回气泡数组，走现有 deliverReply 通道发出 */
+function tierWrap(mid, core, tier) {
+  core = String(core || '');
+  if (tier === 'leave') return [TIER_LEAVE[mid] || '我先忙了'];
+  if (tier === 'cold') return [coldShort(core)];
+  if (tier === 'hesitant') return [stylize(mid, core)];
+  /* 积极/友好：回应—分享—问一句 */
+  var out = [stylize(mid, core)];
+  var shares = TIER_SHARE[mid], asks = TIER_ASK[mid];
+  if (tier === 'active') {
+    if (shares) out.push(shares[Math.floor(Math.random() * shares.length)]);
+    if (asks) out.push(asks[Math.floor(Math.random() * asks.length)]);
+  } else {
+    if (shares && Math.random() < 0.4) out.push(shares[Math.floor(Math.random() * shares.length)]);
+    if (asks) out.push(asks[Math.floor(Math.random() * asks.length)]);
+  }
+  return out;
+}
 function botReply(mid, text) {
   var m = memberById(mid);
   var t = String(text || '');
+  var tier = affectionTierOf(mid);
   var aff = 0;
   try { aff = (state.affection && state.affection[mid]) || 0; } catch (e) {}
   var warm = aff >= 50;
@@ -247,17 +352,140 @@ function botReply(mid, text) {
     [/加油| fighting/i, ['一起加油！', '嗯！不会让你失望的']],
     [/再见|拜拜|回见|晚点聊/, ['拜拜', '嗯，回见']],
   ];
+  var core = null;
   for (var i = 0; i < rules.length; i++) {
     if (rules[i][0].test(t)) {
       var r = rules[i][1];
       r = (typeof r === 'function') ? r() : r;
-      return r[Math.floor(Math.random() * r.length)];
+      core = r[Math.floor(Math.random() * r.length)];
+      break;
     }
   }
-  var fb = FALLBACK[mid] || ['嗯嗯', '哈哈', '这样啊'];
-  var s = fb[Math.floor(Math.random() * fb.length)];
-  if (Math.random() < 0.25) s += '对了，' + placeNow() + '这边刚才还挺热闹的。';
+  if (core == null) {
+    var fb = FALLBACK[mid] || ['嗯嗯', '哈哈', '这样啊'];
+    core = fb[Math.floor(Math.random() * fb.length)];
+    if (Math.random() < 0.25) core += '对了，' + placeNow() + '这边刚才还挺热闹的。';
+  }
+  /* 关键词规则原样保留，档位只影响语气 / 长度 / 结构 */
+  return tierWrap(mid, core, tier);
+}
+/* ---- 微信拟真度：个性点缀 / 多气泡 / 记忆引用 / 主动消息 ---- */
+var WX_EMOJI = {
+  james: ['😊', '🌙'],
+  juhoon: ['❄️'],
+  martin: ['💪', '☕'],
+  seong: ['🙄', '💢'],
+  keonho: ['🥺', '✨'],
+};
+var WX_FILLER = {
+  james: ['嗯——', '那个…'],
+  juhoon: ['…', '啧，'],
+  martin: ['听我说，', '放心，'],
+  seong: ['哼，', '喂，'],
+  keonho: ['嘿嘿，', '呜哇——'],
+};
+/* 个性点缀：偶尔加口头禅开头、常用 emoji 结尾，不会每条都加 */
+function stylize(mid, text) {
+  var s = String(text || '');
+  if (Math.random() < 0.28) {
+    var fs = WX_FILLER[mid];
+    if (fs) s = fs[Math.floor(Math.random() * fs.length)] + s;
+  }
+  if (Math.random() < 0.32) {
+    var es = WX_EMOJI[mid] || [];
+    var has = es.some(function (e) { return s.indexOf(e) >= 0; });
+    if (es.length && !has) s += es[Math.floor(Math.random() * es.length)];
+  }
   return s;
+}
+/* 记忆引用：低概率带玩家名字或提一句上次选项关键词（防御式读取 state） */
+function memoryLine() {
+  var name = '', kw = '';
+  try {
+    if (window.state && state.player && state.player.name) name = String(state.player.name);
+    if (typeof state.lastChoiceKeyword !== 'undefined' && state.lastChoiceKeyword) kw = String(state.lastChoiceKeyword);
+  } catch (e) {}
+  var r = Math.random();
+  if (kw && r < 0.10) return '说起来，你上次说「' + kw + '」的时候，我记到现在呢';
+  if (name && r < 0.18) {
+    var tpl = ['话说回来，' + name + '，你今天辛苦啦', '有你在，' + name + '，真好', '对了' + name + '，最近还好吗'];
+    return tpl[Math.floor(Math.random() * tpl.length)];
+  }
+  return '';
+}
+/* 长回复按标点/长度拆成 2~3 条短气泡 */
+function splitBubbles(text) {
+  var t = String(text || '');
+  if (t.length <= 14) return [t];
+  var parts = t.match(/[^，。！？；…]+[，。！？；…]?/g) || [t];
+  var out = [], cur = '';
+  parts.forEach(function (p) {
+    if (cur && cur.length + p.length > 22) { out.push(cur); cur = p; }
+    else cur += p;
+  });
+  if (cur) out.push(cur);
+  if (out.length > 3) out = [out[0], out.slice(1, out.length - 1).join(''), out[out.length - 1]];
+  return out;
+}
+/* 多气泡发送：第一条立即 pushIM，其余链式间隔 0.8~2 秒；
+ * rawText 可为字符串或已组装好的气泡数组（第二轮三段式回复） */
+function deliverReply(tid, mid, rawText, prefix) {
+  var tier = affectionTierOf(mid);
+  var bubbles = Array.isArray(rawText)
+    ? rawText.slice()
+    : splitBubbles(stylize(mid, rawText));
+  bubbles = bubbles.filter(function (b) { return String(b || '').length > 0; });
+  if (!bubbles.length) bubbles = ['嗯'];
+  var mem = memoryLine();
+  /* 离开档不追加记忆气泡，保持终结话题 */
+  if (mem && tier !== 'leave') {
+    if (bubbles.length < 3) bubbles.push(mem);
+    else bubbles[bubbles.length - 1] += mem;
+  }
+  /* 爱心粒子钩子：积极/友好档的暖心回复，或回复含 ♥；burstHearts 由协调人稍后注入 */
+  if (tier === 'active' || tier === 'friendly' ||
+      bubbles.some(function (b) { return String(b).indexOf('♥') >= 0; })) {
+    if (window.burstHearts) { try { burstHearts(window.innerWidth / 2, window.innerHeight * 0.35); } catch (_) {} }
+  }
+  prefix = prefix || '';
+  pushIM(tid, mid, prefix + bubbles[0]);
+  var i = 1;
+  (function next() {
+    if (i >= bubbles.length) return;
+    setTimeout(function () {
+      pushIM(tid, mid, bubbles[i]);
+      i++;
+      next();
+    }, 800 + Math.random() * 1200);
+  })();
+}
+/* 角色主动消息：每隔 3 回合、小概率推一条日常，guestMode 不触发 */
+var PROACTIVE_LINES = {
+  james: ['在干嘛呢？突然有点想你了', '今天排练看到一只超可爱的猫，可惜你没在', '晚上有空吗？想跟你说说话'],
+  juhoon: ['…你在忙吗', '刚写了段旋律，要听吗', '没睡的话，回我一下'],
+  martin: ['今天训练还顺利吗？别太累了', '给你留了好吃的，记得来拿', '有我在，别担心'],
+  seong: ['哼，某人今天怎么没找我', '喂！看到消息就回一下啊', '今天舞台超帅的，可惜你没看到'],
+  keonho: ['嘿嘿！猜我在哪儿？', '给你带了小蛋糕，要不要吃！', '今天超想你的说🥺'],
+};
+var _lastProactiveTurn = -99;
+function maybeProactive(tid) {
+  if (guestMode) return;
+  var turn = 0;
+  try { turn = (window.state && typeof state.turn === 'number') ? state.turn : 0; } catch (e) {}
+  if (turn < 2) return;
+  if (turn - _lastProactiveTurn < 3) return;
+  if (Math.random() > 0.25) return;
+  _lastProactiveTurn = turn;
+  var targets;
+  if (tid && tid.indexOf('dm:') === 0) targets = [tid];
+  else targets = Object.keys(threadMeta).filter(function (t) { return t.indexOf('dm:') === 0; });
+  if (!targets.length) return;
+  var t2 = targets[Math.floor(Math.random() * targets.length)];
+  var mid = t2.replace(/^dm:/, '');
+  var lines = PROACTIVE_LINES[mid];
+  if (!lines) return;
+  var line = lines[Math.floor(Math.random() * lines.length)];
+  setTimeout(function () { pushIM(t2, mid, line); }, 1200 + Math.random() * 1500);
 }
 var GROUP_POOL = [
   '今天彩排累瘫了', '谁看到我的水杯了？', '明天几点集合来着', '刚那遍副歌绝了',
@@ -279,7 +507,7 @@ function groupReply(text) {
   var mid = tid.replace(/^dm:/, '');
   setTimeout(function () {
     var m = memberById(mid);
-    pushIM('group', mid, (m ? m.name : '成员') + '：' + botReply(mid, text));
+    deliverReply('group', mid, botReply(mid, text), (m ? m.name : '成员') + '：');
   }, 1500 + Math.random() * 1500);
 }
 
@@ -659,6 +887,7 @@ function startSolo() {
     style: $('#player-style').value.trim(),
   };
   chosen.forEach(function (id) { state.affection[id] = 18; });
+  ensureFirstDay();
   try { localStorage.setItem('cortis-save', JSON.stringify(state)); } catch (err) {}
   $('#onboarding').hidden = true;
   renderTurn('start');
@@ -729,6 +958,8 @@ function wire() {
     toast('你拨打的号码是空号…');
   };
   $('#call-end').onclick = function () { endCall(false); };
+
+  updateBondDays();
 }
 
 if (document.readyState === 'loading') {
