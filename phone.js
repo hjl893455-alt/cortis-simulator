@@ -349,6 +349,14 @@ function coldShort(text) {
   s = s.replace(/[，。、；：,.]+$/g, '').slice(0, 10);
   return s || '嗯';
 }
+/* 玩家性别称呼：男→小哥哥 / 女→小姐姐，自定义或空保持中性 */
+function playerTitle() {
+  var g = '';
+  try { var st = window.state || {}; g = String(st.player && st.player.gender || '').trim(); } catch (e) {}
+  if (g === '男') return '小哥哥';
+  if (g === '女') return '小姐姐';
+  return '';
+}
 /* 档位组装：返回气泡数组，走现有 deliverReply 通道发出 */
 function tierWrap(mid, core, tier) {
   core = String(core || '');
@@ -365,6 +373,9 @@ function tierWrap(mid, core, tier) {
     if (shares && Math.random() < 0.4) out.push(shares[Math.floor(Math.random() * shares.length)]);
     if (asks) out.push(asks[Math.floor(Math.random() * asks.length)]);
   }
+  /* 性别称呼：友好/积极档小概率在首条加一次称呼，不改写原台词 */
+  var pt = playerTitle();
+  if (pt && out.length && out[0].indexOf(pt) < 0 && Math.random() < 0.3) out[0] = pt + '，' + out[0];
   return out;
 }
 function botReply(mid, text) {
@@ -1179,7 +1190,8 @@ window.WxCore = {
   DM_SCENE: DM_SCENE, DM_OPEN: DM_OPEN, DM_HINT: DM_HINT, DM_MILE: DM_MILE,
   DM_FACE: DM_FACE, DM_MOOD: DM_MOOD,
   dmAff: dmAff, memberById: memberById, gameClock: gameClock, wxToday: wxToday,
-  ensureFirstDay: ensureFirstDay, ensureWxScore: ensureWxScore, esc: esc, toast: toast
+  ensureFirstDay: ensureFirstDay, ensureWxScore: ensureWxScore, esc: esc, toast: toast,
+  playerTitle: playerTitle
 };
 
 /* ================= 开机流程 & 接线 ================= */
@@ -1202,6 +1214,7 @@ function startSolo() {
     country: setupField('country'),
     traits: setupField('traits'),
     job: setupField('job'),
+    gender: setupField('gender'),
   };
   if (!state.affection) state.affection = {};
   chosen.forEach(function (id) { state.affection[id] = 18; });
@@ -1239,7 +1252,7 @@ function setupField(name) {
   return sel.value;
 }
 function wireCustomInputs() {
-  ['age', 'country', 'traits', 'job'].forEach(function (name) {
+  ['age', 'country', 'traits', 'job', 'gender'].forEach(function (name) {
     var sel = $('#player-' + name);
     var custom = $('#player-' + name + '-custom');
     if (!sel || !custom) return;
@@ -1280,7 +1293,16 @@ function wire() {
     if (lk) {
       var unlock = function () { show('onboarding'); };
       lk.addEventListener('click', unlock);
-      lk.addEventListener('touchend', function (e) { e.preventDefault(); unlock(); });
+      /* 上滑解锁：touchstart 记起点，touchend 上滑超 30px 即解锁；轻点走 click */
+      var tsY = 0;
+      lk.addEventListener('touchstart', function (e) {
+        try { tsY = e.changedTouches[0].clientY; } catch (_) { tsY = 0; }
+      }, { passive: true });
+      lk.addEventListener('touchend', function (e) {
+        var dy = 0;
+        try { dy = tsY - e.changedTouches[0].clientY; } catch (_) {}
+        if (dy > 30) { e.preventDefault(); unlock(); }
+      });
     }
   }
   tickClock();
