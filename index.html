@@ -17,130 +17,42 @@
       <div class="lock-date" id="lock-date"></div>
       <div class="lock-hint">点击任意处解锁 →</div>
     </section>
-    <section id="home" class="screen home" hidden>
-      <div class="home-clock"><div id="home-time">9:41</div><div id="home-date"></div></div>
-      <div class="app-grid">
-        <button class="app-icon" data-app="wechat"><span class="app-glyph wx">💬</span><em>微信</em><i class="app-badge" id="badge-wechat" hidden></i></button>
-        <button class="app-icon" data-app="phone"><span class="app-glyph ph">📞</span><em>电话</em></button>
-        <button class="app-icon" data-app="story"><span class="app-glyph st">📖</span><em>故事</em></button>
-        <button class="app-icon" data-app="photos"><span class="app-glyph al">🖼️</span><em>相册</em><i class="app-badge" id="badge-photos" hidden></i></button>
-      </div>
-      <p class="home-hint">点按图标打开应用</p>
-    </section>
     <section id="onboarding" class="screen onboarding">
-      <div class="brand"><span class="eyebrow">FICTIONAL STORY MODE</span><h1>CORTIS<span>·</span>恋爱模拟器</h1><p>Color outside the lines</p></div>
-      <div class="notice">这是完全虚构的平行世界故事。角色均为成年设定，剧情不对应现实人物或事件。</div>
-
-      <div class="mode-toggle">
-        <button type="button" class="mode-btn active" data-mode="solo">单人故事</button>
-        <button type="button" class="mode-btn" data-mode="create">👥 多人房间</button>
-      </div>
-      <p id="mode-hint" class="mode-hint">独自体验完整剧情。</p>
-
+      <h1>CORTIS · 恋爱模拟器</h1>
+      <p class="ob-sub">30 秒，开始你的故事</p>
       <form id="setup-form">
-        <div class="form-head"><span>01</span><h2>建立你的角色</h2></div>
-        <label>姓名<input id="player-name" required maxlength="18" placeholder="输入你的名字"></label>
-        <div class="two-col"><label>年龄<input id="player-age" required type="number" min="18" max="99" placeholder="18+"></label><label>国籍<input id="player-country" required maxlength="16" placeholder="例如：中国"></label></div>
-        <label>性格<input id="player-traits" required maxlength="30" placeholder="例如：慢热、敏锐、嘴硬"></label>
-        <label>职业<select id="player-job"><option>同公司练习生</option><option>已出道艺人</option><option>造型师</option><option>咖啡店兼职生</option><option>编舞师</option><option value="custom">自定义</option></select></label>
-        <label id="custom-job-wrap" hidden>自定义职业<input id="custom-job" maxlength="24" placeholder="你的职业"></label>
-        <label>外貌特点／风格 <em>可选</em><input id="player-style" maxlength="40" placeholder="例如：旧牛仔外套、胶片相机"></label>
-        <div class="form-head choice-head"><span>02</span><h2>选择故事主角</h2><small>可多选，未选择成员仅作为好友出现</small></div>
-        <div id="member-picker" class="member-picker"></div>
-        <button class="primary" type="submit" id="start-btn">确认设定，进入故事 <b>→</b></button>
-      </form>
-      <button type="button" id="join-link" class="ghost-link" hidden>加入朋友的房间 →</button>
-
-      <div id="join-panel" hidden>
-        <div class="form-head"><span>👥</span><h2>加入房间</h2><small>向房主索要 4 位房间码，或打开朋友发来的邀请链接</small></div>
-        <label>你的昵称<input id="join-nick" maxlength="18" placeholder="大家会看到这个名字"></label>
-        <label>房间码<input id="join-code" maxlength="4" placeholder="例如：KX7Q" style="text-transform:uppercase;letter-spacing:6px;font-family:'DM Mono',monospace"></label>
-        <button class="primary" type="button" id="join-go">加入房间 →</button>
-        <button type="button" id="join-back" class="ghost-link">← 返回</button>
-        <p class="mode-hint">加入后你将实时看到房主的故事，并和房间里的大家一起投票决定剧情走向，还能聊天。</p>
-      </div>
-    </section>
-
-    <section id="story" class="screen story" hidden>
-      <header class="topbar"><button id="story-home-btn" class="icon-btn" aria-label="回主屏幕">⌂</button><button id="back-btn" class="icon-btn" aria-label="返回设定">‹</button><div><span id="day-label">周二</span><strong>Chapter 01</strong></div><button id="save-btn" class="icon-btn" aria-label="保存进度">⌑</button></header>
-      <div class="story-meta"><span id="time-label">07:48</span><i></i><span id="place-label">HYBE 练习室 B</span></div>
-      <article id="narrative" class="narrative"></article>
-      <section id="phone-card" class="phone-card" hidden></section>
-      <section class="choices"><div id="vote-status" class="vote-status" hidden></div><p>接下来你打算怎么做？</p><div id="choice-list"></div><button id="custom-toggle" class="custom-link">✦ 自定义行动</button><div id="custom-action" class="custom-action" hidden><input id="custom-input" maxlength="100" placeholder="写下你的行动…"><button id="custom-send">发送</button></div></section>
-      <section class="stats"><div class="stat-title"><span>▣</span> 本次变化</div><div id="delta-list"></div><div class="inventory">背包：<span id="bag">空</span>　｜　通讯录：<span id="contacts">无</span>　｜　解锁 CG：<span id="cg">0</span></div></section>
-      <nav class="bottom-nav"><button class="active" data-panel="story">✦<span>故事</span></button><button data-panel="profile">◎<span>档案</span></button><button data-panel="stats">⌁<span>数值</span></button></nav>
-    </section>
-
-    <section id="app-wechat" class="screen app-screen" hidden>
-      <header class="app-topbar"><button class="icon-btn home-btn" aria-label="回主屏幕">⌂</button><strong>微信</strong><span class="app-topbar-space"></span></header>
-      <div id="wx-thread-list" class="wx-thread-list"></div>
-      <div id="wx-thread" hidden>
-        <div class="wx-thread-head"><button id="wx-back" class="icon-btn">‹</button><strong id="wx-thread-name"></strong></div>
-        <div id="wx-msgs" class="wx-msgs"></div>
-        <div class="wx-input"><input id="wx-text" maxlength="200" placeholder="发消息…"><button id="wx-send">发送</button></div>
-      </div>
-    </section>
-
-    <section id="app-phone" class="screen app-screen" hidden>
-      <header class="app-topbar"><button class="icon-btn home-btn" aria-label="回主屏幕">⌂</button><strong>电话</strong><span class="app-topbar-space"></span></header>
-      <div class="ph-tabs">
-        <button class="ph-tab active" data-ptab="log">通话记录</button>
-        <button class="ph-tab" data-ptab="contacts">通讯录</button>
-        <button class="ph-tab" data-ptab="dial">拨号盘</button>
-      </div>
-      <div id="ph-log" class="ph-pane"></div>
-      <div id="ph-contacts" class="ph-pane" hidden></div>
-      <div id="ph-dial" class="ph-pane" hidden>
-        <div id="dial-display" class="dial-display">　</div>
-        <div class="dial-pad">
-          <button class="dial-key" data-k="1">1</button><button class="dial-key" data-k="2">2</button><button class="dial-key" data-k="3">3</button>
-          <button class="dial-key" data-k="4">4</button><button class="dial-key" data-k="5">5</button><button class="dial-key" data-k="6">6</button>
-          <button class="dial-key" data-k="7">7</button><button class="dial-key" data-k="8">8</button><button class="dial-key" data-k="9">9</button>
-          <button class="dial-key" data-k="*">*</button><button class="dial-key" data-k="0">0</button><button class="dial-key" data-k="#">#</button>
+        <label class="fld">你的昵称<div class="name-row"><input id="player-name" maxlength="18" placeholder="输入昵称"><button type="button" id="rand-name">🎲 随机</button></div></label>
+        <div class="two-col">
+          <label class="fld">年龄<select id="player-age"><option>随便</option><option>18–22</option><option>23–26</option><option>27–30</option><option value="custom">自定义…</option></select><input id="player-age-custom" class="custom-input" maxlength="16" placeholder="例如：25 岁" hidden></label>
+          <label class="fld">国籍<select id="player-country"><option>随便</option><option>中国</option><option>韩国</option><option>美国</option><option>其他</option><option value="custom">自定义…</option></select><input id="player-country-custom" class="custom-input" maxlength="16" placeholder="例如：日本" hidden></label>
         </div>
-        <div class="dial-actions"><button id="dial-call" class="dial-call">📞 呼叫</button><button id="dial-clear" class="dial-clear">⌫</button></div>
-      </div>
-      <div id="ph-call" class="ph-call" hidden>
-        <div class="call-avatar" id="call-avatar">韩</div>
-        <div class="call-name" id="call-name"></div>
-        <div class="call-status" id="call-status">正在呼叫…</div>
-        <div class="call-script" id="call-script"></div>
-        <button id="call-end" class="call-end">挂断</button>
-      </div>
-      <div id="ph-incoming" class="ph-incoming" hidden>
-        <div class="call-avatar" id="inc-avatar">韩</div>
-        <div class="call-name" id="inc-name"></div>
-        <div class="call-status">来电…</div>
-        <div class="inc-btns"><button id="inc-decline" class="inc-decline">拒绝</button><button id="inc-accept" class="inc-accept">接听</button></div>
-      </div>
+        <div class="two-col">
+          <label class="fld">性格<select id="player-traits"><option>随便</option><option>开朗外向</option><option>温柔体贴</option><option>高冷慢热</option><option>幽默风趣</option><option>认真靠谱</option><option value="custom">自定义…</option></select><input id="player-traits-custom" class="custom-input" maxlength="30" placeholder="例如：外冷内热" hidden></label>
+          <label class="fld">职业<select id="player-job"><option>随便</option><option>学生</option><option>公司新人</option><option>练习生</option><option>自由职业</option><option value="custom">自定义…</option></select><input id="player-job-custom" class="custom-input" maxlength="24" placeholder="例如：咖啡师" hidden></label>
+        </div>
+        <label class="fld">选择心动对象<div id="member-picker" class="member-picker"></div></label>
+        <button class="primary" type="submit" id="start-btn">进入游戏 <b>→</b></button>
+      </form>
     </section>
-
-    <section id="app-photos" class="screen app-screen" hidden>
-      <header class="app-topbar"><button class="icon-btn home-btn" aria-label="回主屏幕">⌂</button><strong>相册</strong><span class="app-topbar-space"></span></header>
-      <div id="photo-grid" class="photo-grid"></div>
+    <section id="game" class="screen game" hidden>
+      <div id="member-bar"></div>
+      <header id="g-head">
+        <span id="g-avatar">😐</span>
+        <div class="g-head-main">
+          <div class="g-head-topline"><strong id="g-name"></strong><small id="g-mood"></small></div>
+          <div class="g-head-affline"><span>好感 <b id="g-affnum">0 / 100</b></span><span id="g-days"></span><button id="g-scene-btn" type="button">换场景</button></div>
+          <div id="g-track"><div id="g-fill"></div></div>
+        </div>
+      </header>
+      <div id="g-flow"></div>
+      <div id="g-quick"></div>
+      <div id="g-dock"><textarea id="g-input" rows="1" maxlength="200" placeholder="说点什么…"></textarea><button id="g-send" type="button">发送</button></div>
+      <div id="g-win" hidden><div class="g-win-card"><div class="g-win-emoji">🥰</div><h2 class="g-win-title">他彻底心动了！</h2><p class="g-win-text"></p><button id="g-win-ok" type="button">继续聊天</button></div></div>
     </section>
   </main>
 
-  <button id="room-fab" class="room-fab" hidden>👥</button>
-  <div id="danmaku-layer" class="danmaku-layer"></div>
-  <div id="room-panel" class="room-panel" hidden style="display:none">
-    <div class="room-head"><strong>👥 多人房间</strong><label class="danmaku-toggle"><input type="checkbox" id="danmaku-switch" checked> 弹幕</label><select id="danmaku-density" class="danmaku-density"><option value="low">少量</option><option value="mid" selected>中等</option><option value="high">满屏</option></select><button id="room-close" class="close-sm">×</button></div>
-    <div class="room-code-wrap"><span>房间码</span><b id="room-code">----</b><button id="copy-invite" class="copy-btn">复制邀请链接</button></div>
-    <div class="room-tabs">
-      <button type="button" class="room-tab active" data-tab="members">成员</button>
-      <button type="button" class="room-tab" data-tab="chat">聊天 <i id="chat-badge" hidden></i></button>
-    </div>
-    <ul id="member-list" class="member-list"></ul>
-    <div id="chat-box" hidden>
-      <div id="chat-log" class="chat-log"></div>
-      <div class="chat-input"><input id="chat-text" maxlength="200" placeholder="说点什么…"><button id="chat-send">发送</button></div>
-    </div>
-  </div>
-
   <dialog id="panel-dialog"><button id="close-dialog" class="close">×</button><div id="dialog-content"></div></dialog>
-  <script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js"></script>
-  <script src="app.js"></script>
+  <script src="game.js"></script>
   <script src="phone.js"></script>
-  <script src="multiplayer.js"></script>
 </body>
 </html>
