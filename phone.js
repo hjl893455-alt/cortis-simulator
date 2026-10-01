@@ -68,6 +68,7 @@ function show(id) {
 function goHome() {
   show('home');
   ensureFirstDay();
+  ensureWxScore();
   renderHomeBadges();
   updateBondDays();
 }
@@ -81,7 +82,15 @@ function ensureFirstDay() {
     }
   } catch (e) {}
 }
-/* 在 #home 的 .home-clock 后面创建 <div class="bond-days">，文本如 "💞 羁绊第 X 天" */
+/* 旧存档兼容：微信私聊哄哄模式新增字段（开场记录 / 里程碑记录），不存在则补空对象 */
+function ensureWxScore() {
+  try {
+    if (typeof state === 'undefined' || !state) return;
+    if (!state.wxIntro) state.wxIntro = {};
+    if (!state.wxMile) state.wxMile = {};
+  } catch (e) {}
+}
+/* 在 #home 的 .home-clock 后面创建 <div class="bond-days">，文本如"羁绊第 X 天"（前面带爱心符号） */
 function updateBondDays() {
   var days = 1;
   try {
@@ -155,6 +164,10 @@ function renderHomeBadges() {
 }
 function renderThreadList() {
   $('#wx-thread').hidden = true;
+  $('#wx-thread').classList.remove('dm');
+  var dh = $('#wx-dm-head'), qq = $('#wx-quick');
+  if (dh) dh.hidden = true;
+  if (qq) qq.hidden = true;
   $('#wx-thread-list').hidden = false;
   var list = $('#wx-thread-list');
   list.innerHTML = '';
@@ -180,6 +193,19 @@ function openThread(tid) {
   $('#wx-thread-name').textContent = threadMeta[tid].name;
   unread[tid] = 0;
   renderMsgs();
+  /* 私聊 / 群聊分流：私聊挂哄哄模式（对象头 + 快捷回复 + 每日开场 + 里程碑检查） */
+  var isDm = tid.indexOf('dm:') === 0;
+  th.classList.toggle('dm', isDm);
+  var dmHead = $('#wx-dm-head'), quickBar = $('#wx-quick');
+  if (dmHead) dmHead.hidden = !isDm;
+  if (quickBar) quickBar.hidden = !isDm;
+  if (isDm) {
+    ensureWxScore();
+    var dmid = tid.replace(/^dm:/, '');
+    renderDmHead(dmid);
+    dmDailyIntro(tid, dmid);
+    maybeMilestone(dmid);
+  }
   renderHomeBadges();
   maybeProactive(tid);
 }
@@ -236,20 +262,32 @@ function sendWx() {
   renderMsgs();
   if (tid === 'group') { groupReply(text); return; }
   var mid = tid.replace(/^dm:/, '');
+  /* 私聊哄哄模式：先判分写入好感，再出反应句 + 回复气泡 */
+  var sc = scoreWxMsg(text);
+  try {
+    if (!state.affection) state.affection = {};
+    state.affection[mid] = Math.max(0, Math.min(100, dmAff(mid) + sc.delta));
+    save();
+  } catch (e) {}
+  showScorePill(sc.delta, sc.tag);
+  renderDmHead(mid);
+  maybeMilestone(mid);
+  var reaction = pickDmReact(sc.delta, mid);
+  var reply = botReply(mid, text);
+  var bubbles = Array.isArray(reply) ? [reaction].concat(reply) : [reaction, reply];
   var box = $('#wx-msgs');
   var typing = document.createElement('div');
   typing.className = 'wx-msg them';
   typing.innerHTML = '<span class="wx-avatar sm">' + esc(threadMeta[tid].name.charAt(0)) +
     '</span><div class="wx-bubble typing"><i></i><i></i><i></i></div>';
-  var reply = botReply(mid, text);
   setTimeout(function () {
     if (currentThread === tid && box) { box.appendChild(typing); box.scrollTop = box.scrollHeight; }
   }, 600);
-  /* 输入中指示器按回复长度随机化，保留到第一条气泡发出 */
+  /* 输入中指示器按回复长度随机化，保留到第一条气泡发出；私聊再延迟 400~800ms */
   setTimeout(function () {
     if (typing.parentNode) typing.parentNode.removeChild(typing);
-    deliverReply(tid, mid, reply);
-  }, typingDelay(Array.isArray(reply) ? reply.join('') : reply));
+    setTimeout(function () { deliverReply(tid, mid, bubbles); }, 400 + Math.random() * 400);
+  }, typingDelay(bubbles.join('')));
 }
 /* 输入中指示器时长：短句约 0.8 秒，长句可到 2.5 秒+随机 */
 function typingDelay(text) {
@@ -442,7 +480,7 @@ function deliverReply(tid, mid, rawText, prefix) {
     if (bubbles.length < 3) bubbles.push(mem);
     else bubbles[bubbles.length - 1] += mem;
   }
-  /* 爱心粒子钩子：积极/友好档的暖心回复，或回复含 ♥；burstHearts 由协调人稍后注入 */
+  /* 爱心粒子钩子：积极/友好档的暖心回复，或回复含爱心符号；burstHearts 由协调人稍后注入 */
   if (tier === 'active' || tier === 'friendly' ||
       bubbles.some(function (b) { return String(b).indexOf('♥') >= 0; })) {
     if (window.burstHearts) { try { burstHearts(window.innerWidth / 2, window.innerHeight * 0.35); } catch (_) {} }
@@ -509,6 +547,270 @@ function groupReply(text) {
     var m = memberById(mid);
     deliverReply('group', mid, botReply(mid, text), (m ? m.name : '成员') + '：');
   }, 1500 + Math.random() * 1500);
+}
+
+/* ================= 微信私聊重做（哄哄模式） =================
+ * 只作用于 dm: 开头的私聊会话：四档态度、关键词判分、分数胶囊、
+ * 对象信息头、快捷回复、每日开场三连、100 好感里程碑。
+ * 群聊 / 电话 / 故事 / 相册 / 锁屏 / 联机消息结构一律不动。 */
+
+/* 四档：0-34->0，35-69->1，70-99->2，100->3 */
+function dmTier(aff) {
+  var a = Number(aff) || 0;
+  if (a >= 100) return 3;
+  if (a >= 70) return 2;
+  if (a >= 35) return 1;
+  return 0;
+}
+var DM_FACE = ['😤', '😐', '🙂', '🥰'];
+var DM_MOOD = [
+  '还在气头上，小心轻放',
+  '有点松动了，再哄哄',
+  '心情不错，多聊两句',
+  '彻底心动了 ♥',
+];
+function dmAff(mid) {
+  try { return Number((state.affection && state.affection[mid]) || 0); } catch (e) { return 0; }
+}
+function wxToday() {
+  var d = new Date();
+  return d.getFullYear() + '-' + (d.getMonth() + 1) + '-' + d.getDate();
+}
+
+/* ---- 关键词判分：返回 {delta, tag}，单轮钳制到 [-25, +34] ---- */
+var WX_POS_RULES = [
+  { re: /对不起|我错了|是我不好|抱歉|原谅我|我的错/, delta: 26, tag: '认错' },
+  { re: /补偿|以后|我改|请你|陪你|带你去|给你买/, delta: 16, tag: '行动' },
+  { re: /理解|懂你|委屈|心疼|辛苦了|不容易/, delta: 15, tag: '共情' },
+  { re: /宝贝|抱抱|爱你|在乎|喜欢你|想你/, delta: 14, tag: '甜言蜜语' },
+];
+var WX_NEG_RE = /但是|可是|至于|你也|无理取闹|随便|烦死了|别闹|你想多了/;
+var WX_BLUF_RE = /^(?:嗯|哦|知道了|好的|行吧|呵呵|嗯嗯|是|对|好|恩)+[。.!！?？…~～]*$/;
+var WX_SHOUT_RE = /(！|!){2,}/;
+function scoreWxMsg(text) {
+  var t = String(text || '');
+  var stripped = t.replace(/\s+/g, '');
+  var delta = 0, tag = '';
+  var perfunctory = WX_BLUF_RE.test(stripped) || stripped.length <= 2;
+  if (perfunctory) {
+    delta = -14; tag = '敷衍';
+  } else if (WX_NEG_RE.test(t)) {
+    delta = -22; tag = '甩锅';
+  } else {
+    WX_POS_RULES.forEach(function (r) {
+      if (r.re.test(t)) { delta += r.delta; if (!tag) tag = r.tag; }
+    });
+    if (t.length >= 18) delta += 6;
+    if (!tag) tag = '走心长文';
+  }
+  if (WX_SHOUT_RE.test(t)) delta -= 6;
+  delta = Math.max(-25, Math.min(34, delta));
+  return { delta: delta, tag: tag };
+}
+/* 分数胶囊：纯本地 UI，不写入 threads，不广播 */
+function showScorePill(delta, tag) {
+  var box = $('#wx-msgs');
+  if (!box) return;
+  var d = document.createElement('div');
+  d.className = 'wx-score-pill' + (delta > 0 ? ' up' : (delta < 0 ? ' down' : ''));
+  d.textContent = delta > 0 ? ('+' + delta + ' ♥ · ' + tag)
+    : (delta < 0 ? (delta + ' ♥') : '±0 ♥ · 打平');
+  box.appendChild(d);
+  box.scrollTop = box.scrollHeight;
+  setTimeout(function () { d.classList.add('fade'); }, 2000);
+  setTimeout(function () { if (d.parentNode) d.parentNode.removeChild(d); }, 2400);
+}
+
+/* ---- 对象信息头 ---- */
+function renderDmHead(mid) {
+  var aff = dmAff(mid);
+  var tier = dmTier(aff);
+  var m = memberById(mid);
+  var name = m ? m.name : '成员';
+  var av = $('#wx-dm-avatar'), nm = $('#wx-dm-name'), mo = $('#wx-dm-mood'),
+      nu = $('#wx-dm-num'), fill = $('#wx-dm-fill');
+  if (av) av.textContent = DM_FACE[tier];
+  if (nm) nm.textContent = name;
+  if (mo) mo.textContent = DM_MOOD[tier];
+  if (nu) nu.textContent = '好感 ' + aff + ' / 100';
+  if (fill) fill.style.width = aff + '%';
+  renderQuickReplies(mid);
+}
+
+/* ---- 快捷回复：cold 档位 0-1，warm 档位 2-3，{name} 渲染时替换 ---- */
+var WX_QUICK = {
+  james: {
+    cold: ['{name}，对不起嘛，我真的知道错了', '别不理我好不好，我会改的', '罚我请你喝奶茶，原谅我嘛', '今晚等我一起下班好不好'],
+    warm: ['今天排练辛苦啦{name}，我陪你去吃夜宵', '{name}，今晚有空吗？想跟你说说话', '看到好吃的就想起你，改天一起去', '{name}今天也超帅的，加油！'],
+  },
+  juhoon: {
+    cold: ['是我不好，{name}', '别气了，行吗', '下次不会了', '{name}，理我一下'],
+    warm: ['{name}，刚写了段旋律，想第一个给你听', '今天想你了', '有空一起去听歌吗，{name}', '辛苦了，早点休息'],
+  },
+  martin: {
+    cold: ['{name}，这次是我没做好，对不起', '给我个机会补偿你，好吗', '别生气了，气坏身体我心疼', '{name}，我改，保证'],
+    warm: ['训练累了就靠我，{name}', '{name}，今天也辛苦了，一起去吃饭', '有我在，别担心', '想你了，{name}'],
+  },
+  seong: {
+    cold: ['喂，{name}，我错了还不行吗', '别不理我啊，我会改的', '哼……对不起啦', '{name}，原谅我这一次'],
+    warm: ['{name}，今天舞台超帅的，可惜你没看到', '喂，看到消息就回一下啊', '想你了，不许笑', '{name}，下次彩排带你去'],
+  },
+  keonho: {
+    cold: ['{name}，对不起嘛，我真的错了', '别生气了好不好，抱抱', '我给你买好吃的，原谅我嘛', '{name}，理理我嘛'],
+    warm: ['{name}！今天被老师夸了，超开心', '给你带了小蛋糕，要不要吃', '嘿嘿，想你了{name}', '{name}，想听我唱歌吗'],
+  },
+};
+var WX_QUICK_FALLBACK = {
+  cold: ['对不起，我错了', '别生气了好不好', '我会改的', '原谅我这一次'],
+  warm: ['今天辛苦啦', '想你了', '有空一起吃饭吗', '最近还好吗'],
+};
+function renderQuickReplies(mid) {
+  var box = $('#wx-quick');
+  if (!box) return;
+  var m = memberById(mid);
+  var name = m ? m.name : '他';
+  var q = WX_QUICK[mid] || WX_QUICK_FALLBACK;
+  var pool = dmTier(dmAff(mid)) <= 1 ? q.cold : q.warm;
+  box.innerHTML = '';
+  pool.forEach(function (line) {
+    var rendered = String(line).replace(/\{name\}/g, name);
+    var b = document.createElement('button');
+    b.className = 'wx-quick-item';
+    b.textContent = rendered;
+    b.onclick = function () {
+      var inp = $('#wx-text');
+      if (inp && !guestMode) { inp.value = rendered; sendWx(); }
+    };
+    box.appendChild(b);
+  });
+}
+
+/* ---- 四档反应台词池：按本轮 delta 选档，{name} 占位符 ---- */
+var DM_REACT = {
+  big: [
+    '{name}，你这样说，我整颗心都要化了……',
+    '！！你认真的吗？等等，我先去冷静三秒钟',
+    '嘿嘿，被你哄好了——那就原谅你了',
+    '其实早就想说了，谢谢你一直在我身边',
+  ],
+  small: [
+    '嗯……这还差不多',
+    '哼，算你会说话',
+    '好吧好吧，不生气了',
+    '行，这次就放过你',
+  ],
+  flat: [
+    '嗯',
+    '知道了',
+    '哦……行吧',
+    '还行',
+  ],
+  minus: [
+    '你先自己好好想想吧',
+    '……我现在不想说话',
+    '随便你',
+    '别烦我，让我静静',
+  ],
+};
+function pickDmReact(delta, mid) {
+  var pool = delta >= 22 ? DM_REACT.big
+    : (delta >= 8 ? DM_REACT.small : (delta > 0 ? DM_REACT.flat : DM_REACT.minus));
+  var m = memberById(mid);
+  var name = m ? m.name : '';
+  var line = pool[Math.floor(Math.random() * pool.length)] || '';
+  return String(line).replace(/\{name\}/g, name);
+}
+
+/* ---- 每日开场三连：场景句 + 对方开场白气泡 + 玩法提示 ---- */
+var DM_SCENE = {
+  james: '深夜的练习室，灯还亮着，他刚结束加练',
+  juhoon: '走廊尽头的录音室，门缝里漏出一段旋律',
+  martin: '队长办公室的灯还亮着，他在看明天的行程表',
+  seong: '天台上风有点大，他一个人看了一会儿夜景',
+  keonho: '宿舍的灯关了一半，他抱着抱枕缩在沙发上',
+};
+var DM_OPEN = {
+  james: '还没睡？我刚练完，看到你在线，就想跟你说说话。',
+  juhoon: '…睡不着。刚才写了段东西，你要听吗？',
+  martin: '这么晚还没休息？别熬太晚，身体要紧。',
+  seong: '喂，还没睡啊？正好，我有话跟你说。',
+  keonho: '嘿嘿，你还没睡！我刚偷吃了经纪人的饼干，要分你一半吗？',
+};
+var DM_HINT = '回得走心一点——他会记住你的每一句话';
+function dmDailyIntro(tid, mid) {
+  var box = $('#wx-msgs');
+  if (!box) return;
+  var today = wxToday();
+  try { ensureWxScore(); } catch (e) {}
+  try { if (state.wxIntro && state.wxIntro[mid] === today) return; } catch (e) { return; }
+  var m = memberById(mid);
+  var name = m ? m.name : '他';
+  /* 场景句 */
+  var scene = document.createElement('div');
+  scene.className = 'wx-scene-pill';
+  scene.textContent = DM_SCENE[mid] || '夜深了，他还在等你说话';
+  box.appendChild(scene);
+  /* 对方开场白气泡（结构仿 renderMsgs 的 them 行）；只留存 threads，不走 pushIM */
+  var line = DM_OPEN[mid] || '嗨，在吗？';
+  var d = document.createElement('div');
+  d.className = 'wx-msg them';
+  var av = document.createElement('span');
+  av.className = 'wx-avatar sm';
+  av.textContent = name.charAt(0);
+  d.appendChild(av);
+  var b = document.createElement('div');
+  b.className = 'wx-bubble';
+  b.textContent = line;
+  var ts = document.createElement('small');
+  ts.className = 'wx-ts';
+  ts.textContent = gameClock();
+  b.appendChild(ts);
+  d.appendChild(b);
+  box.appendChild(d);
+  try {
+    if (!threads[tid]) threads[tid] = [];
+    threads[tid].push({ me: false, text: line, ts: gameClock(), from: mid });
+  } catch (e) {}
+  /* 玩法提示 */
+  var hint = document.createElement('div');
+  hint.className = 'wx-hint-pill';
+  hint.textContent = '💡 ' + DM_HINT;
+  box.appendChild(hint);
+  box.scrollTop = box.scrollHeight;
+  try {
+    state.wxIntro[mid] = today;
+    save();
+  } catch (e) {}
+}
+
+/* ---- 里程碑：好感到 100 且未触发过时，全屏心动 overlay ---- */
+var DM_MILE = {
+  james: '练习室的灯还亮着，他擦着汗朝你笑，第一次没有躲开你的视线。',
+  juhoon: '他把耳机分了一只给你，耳机线那头，是他写给你的旋律。',
+  martin: '他把明天的行程表递给你，说：以后，都一起。',
+  seong: '他别过脸，耳尖发红：哼……是我的了，不许反悔。',
+  keonho: '他抱着抱枕扑过来：嘿嘿，从今天起，你是我的人啦！',
+};
+function maybeMilestone(mid) {
+  var ov = $('#wx-milestone');
+  var txt = ov ? ov.querySelector('.wx-milestone-text') : null;
+  try { ensureWxScore(); } catch (e) {}
+  var aff = dmAff(mid);
+  var done = false;
+  try { done = !!(state.wxMile && state.wxMile[mid]); } catch (e) {}
+  if (aff < 100 || done || !ov) return;
+  try { state.wxMile[mid] = true; save(); } catch (e) {}
+  if (txt) txt.textContent = DM_MILE[mid] || '他第一次没有躲开你的视线。';
+  ov.hidden = false;
+  /* 连撒几次爱心 */
+  var n = 0;
+  var iv = setInterval(function () {
+    try {
+      if (window.burstHearts) burstHearts(Math.random() * window.innerWidth, window.innerHeight * (0.2 + Math.random() * 0.5));
+    } catch (_) {}
+    n++;
+    if (n >= 6) clearInterval(iv);
+  }, 350);
 }
 
 /* ================= 电话 ================= */
@@ -790,11 +1092,15 @@ function phoneOnTurn() {
     if (ld) setTimeout(function () { incomingCall(ld.id, 'lead_call'); }, 4000);
   }
 }
-var _renderTurn = renderTurn;
-renderTurn = function (mode, action) {
-  _renderTurn(mode, action);
-  try { phoneOnTurn(); } catch (e) { console.warn('[phone] onTurn', e); }
-};
+/* app.js 已退役：只有旧故事引擎仍在（typeof 检查通过）时才包装 renderTurn，
+ * 否则跳过——直接引用未定义的 renderTurn 会抛 ReferenceError 杀死整个 IIFE。 */
+if (typeof renderTurn === 'function') {
+  var _renderTurn = renderTurn;
+  renderTurn = function (mode, action) {
+    _renderTurn(mode, action);
+    try { phoneOnTurn(); } catch (e) { console.warn('[phone] onTurn', e); }
+  };
+}
 
 /* ================= 对外 API ================= */
 var Phone = {
@@ -863,15 +1169,27 @@ var Phone = {
 };
 window.Phone = Phone;
 
+/* game.js 复用桥：哄哄模式纯逻辑 + 数据（只读调用）。
+ * 注意：phone.js 本体是 IIFE，这些函数/数据不暴露就跨文件用不了；
+ * 写旧 #wx-* DOM 的渲染函数（renderDmHead / renderQuickReplies / dmDailyIntro 等）不在此列，game.js 自己写新渲染。 */
+window.WxCore = {
+  scoreWxMsg: scoreWxMsg, dmTier: dmTier, affectionTier: affectionTier,
+  tierWrap: tierWrap, splitBubbles: splitBubbles, pickDmReact: pickDmReact,
+  WX_QUICK: WX_QUICK, WX_QUICK_FALLBACK: WX_QUICK_FALLBACK,
+  DM_SCENE: DM_SCENE, DM_OPEN: DM_OPEN, DM_HINT: DM_HINT, DM_MILE: DM_MILE,
+  DM_FACE: DM_FACE, DM_MOOD: DM_MOOD,
+  dmAff: dmAff, memberById: memberById, gameClock: gameClock, wxToday: wxToday,
+  ensureFirstDay: ensureFirstDay, ensureWxScore: ensureWxScore, esc: esc, toast: toast
+};
+
 /* ================= 开机流程 & 接线 ================= */
 function parseSetup() {
   var chosen = Array.prototype.map.call(
     document.querySelectorAll('.member-card input:checked'), function (x) { return x.value; });
   if (!chosen.length) { alert('请至少选择一位故事主角。'); return null; }
-  var req = [['#player-name', '姓名'], ['#player-age', '年龄'], ['#player-country', '国籍'], ['#player-traits', '性格']];
-  for (var i = 0; i < req.length; i++) {
-    if (!$(req[i][0]).value.trim()) { alert('请填写' + req[i][1] + '。'); $(req[i][0]).focus(); return null; }
-  }
+  /* 年龄/国籍/性格/职业是 select（custom 选项走手填框），只有姓名是必填文本输入 */
+  var nameEl = $('#player-name');
+  if (!nameEl || !nameEl.value.trim()) { alert('请填写姓名。'); if (nameEl) nameEl.focus(); return null; }
   return chosen;
 }
 function startSolo() {
@@ -880,19 +1198,65 @@ function startSolo() {
   state.chosen = chosen;
   state.player = {
     name: $('#player-name').value.trim(),
-    age: $('#player-age').value,
-    country: $('#player-country').value.trim(),
-    traits: $('#player-traits').value.trim(),
-    job: $('#player-job').value === 'custom' ? $('#custom-job').value.trim() : $('#player-job').value,
-    style: $('#player-style').value.trim(),
+    age: setupField('age'),
+    country: setupField('country'),
+    traits: setupField('traits'),
+    job: setupField('job'),
   };
+  if (!state.affection) state.affection = {};
   chosen.forEach(function (id) { state.affection[id] = 18; });
   ensureFirstDay();
-  try { localStorage.setItem('cortis-save', JSON.stringify(state)); } catch (err) {}
+  ensureWxScore();
+  save();
   $('#onboarding').hidden = true;
-  renderTurn('start');
-  Phone.enterMain('solo');
+  $('#game').hidden = false;
+  if (typeof Game !== 'undefined' && Game.init) Game.init();
   toast('欢迎回来，' + state.player.name);
+}
+
+/* onboarding 成员卡：用 game.js 注入的 window.members 填充，默认勾选第一位 */
+function fillMemberPicker() {
+  var box = $('#member-picker');
+  if (!box) return;
+  var ms = window.members || [];
+  if (!box.children.length && ms.length) {
+    box.innerHTML = ms.map(function (m, i) {
+      return '<label class="member-card" data-index="0' + (i + 1) + '"><input type="checkbox" value="' +
+        m.id + '"><span><strong>' + m.name + '</strong><small>' + m.en + ' · ' + m.role + '</small></span></label>';
+    }).join('');
+  }
+  var first = box.querySelector('.member-card input');
+  if (first && !box.querySelector('.member-card input:checked')) first.checked = true;
+}
+/* 设定页 select + 自定义手填框：选 custom 时读手填框（空则回落"随便"），逻辑层不区分预设/手填 */
+function setupField(name) {
+  var sel = $('#player-' + name);
+  var custom = $('#player-' + name + '-custom');
+  if (!sel) return '';
+  if (sel.value === 'custom' && custom) {
+    return custom.value.trim() || '随便';
+  }
+  return sel.value;
+}
+function wireCustomInputs() {
+  ['age', 'country', 'traits', 'job'].forEach(function (name) {
+    var sel = $('#player-' + name);
+    var custom = $('#player-' + name + '-custom');
+    if (!sel || !custom) return;
+    var sync = function () { custom.hidden = (sel.value !== 'custom'); };
+    sel.addEventListener('change', sync);
+    sync();
+  });
+}
+/* 随机昵称池：点一下填一个进 #player-name */
+var NAME_POOL = ['阿哲', '小北', '陈屿', '林晚', '苏打', '阿野', '江小满', '迟遇', '沈聿', '陆燃', '顾清', '温辞'];
+function wireRandName() {
+  var b = $('#rand-name');
+  if (!b) return;
+  b.onclick = function () {
+    var inp = $('#player-name');
+    if (inp) inp.value = NAME_POOL[Math.floor(Math.random() * NAME_POOL.length)];
+  };
 }
 
 function wire() {
@@ -913,9 +1277,11 @@ function wire() {
   } else {
     show('lockscreen');
     var lk = $('#lockscreen');
-    var unlock = function () { show('onboarding'); };
-    lk.addEventListener('click', unlock);
-    lk.addEventListener('touchend', function (e) { e.preventDefault(); unlock(); });
+    if (lk) {
+      var unlock = function () { show('onboarding'); };
+      lk.addEventListener('click', unlock);
+      lk.addEventListener('touchend', function (e) { e.preventDefault(); unlock(); });
+    }
   }
   tickClock();
   setInterval(tickClock, 20000);
@@ -932,12 +1298,23 @@ function wire() {
   var shb = $('#story-home-btn');
   if (shb) shb.onclick = goHome;
 
-  // 微信接线
-  $('#wx-back').onclick = renderThreadList;
-  $('#wx-send').onclick = sendWx;
-  $('#wx-text').addEventListener('keydown', function (e) {
+  // 微信接线（旧 #app-wechat 已下线：逐个判空，缺 DOM 即跳过，避免抛错杀死脚本）
+  var wxBack = $('#wx-back');
+  if (wxBack) wxBack.onclick = renderThreadList;
+  var wxSend = $('#wx-send');
+  if (wxSend) wxSend.onclick = sendWx;
+  var wxText = $('#wx-text');
+  if (wxText) wxText.addEventListener('keydown', function (e) {
     if (e.key === 'Enter') { e.preventDefault(); sendWx(); }
   });
+  // 私聊里程碑 overlay：继续聊天按钮关闭
+  var mileBtn = $('#wx-milestone-btn');
+  if (mileBtn) {
+    mileBtn.onclick = function () {
+      var ov = $('#wx-milestone');
+      if (ov) ov.hidden = true;
+    };
+  }
 
   // 电话接线
   Array.prototype.forEach.call(document.querySelectorAll('.ph-tab'), function (b) {
@@ -951,14 +1328,20 @@ function wire() {
       $('#dial-display').textContent = dialNum;
     };
   });
-  $('#dial-clear').onclick = function () { dialNum = ''; $('#dial-display').textContent = '　'; };
-  $('#dial-call').onclick = function () {
+  var dialClear = $('#dial-clear');
+  if (dialClear) dialClear.onclick = function () { dialNum = ''; var dd = $('#dial-display'); if (dd) dd.textContent = '　'; };
+  var dialCall = $('#dial-call');
+  if (dialCall) dialCall.onclick = function () {
     if (guestMode) { toast('客人模式下不能打电话哦'); return; }
     if (!dialNum) return;
     toast('你拨打的号码是空号…');
   };
-  $('#call-end').onclick = function () { endCall(false); };
+  var callEnd = $('#call-end');
+  if (callEnd) callEnd.onclick = function () { endCall(false); };
 
+  fillMemberPicker();
+  wireRandName();
+  wireCustomInputs();
   updateBondDays();
 }
 
