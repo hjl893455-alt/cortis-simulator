@@ -698,16 +698,60 @@ var Game = {
     };
     var mc = document.getElementById('me-clear');
     if (mc) mc.onclick = function () {
-      if (!window.confirm('确定要清空全部聊天记录吗？\n（好感度会保留）')) return;
-      members.forEach(function (m) {
-        var c = self.chatOf(m.id);
-        if (c) c.msgs = [];
-      });
-      save();
-      self.renderFlow();
-      var W = window.WxCore || {};
-      if (W.toast) W.toast('聊天记录已清空');
+      self.confirmDialog(
+        '清空聊天记录？',
+        '全部成员的聊天记录都会被删除，好感度会保留。',
+        '确定清空',
+        function () {
+          members.forEach(function (m) {
+            var c = self.chatOf(m.id);
+            if (c) c.msgs = [];
+          });
+          save();
+          self.renderFlow();
+          var W = window.WxCore || {};
+          if (W.toast) W.toast('聊天记录已清空');
+        }
+      );
     };
+  },
+
+  /* 自定义确认弹窗（替代原生 window.confirm，测试环境与真机均可交互） */
+  confirmDialog: function (title, text, okLabel, onOk) {
+    var dlg = document.getElementById('panel-dialog');
+    var body = document.getElementById('dialog-content');
+    var x = document.getElementById('close-dialog');
+    if (!dlg || !body) { if (onOk) onOk(); return; }
+    body.innerHTML = '';
+    var t = document.createElement('h3');
+    t.className = 'dlg-title';
+    t.textContent = title;
+    var p = document.createElement('p');
+    p.className = 'dlg-text';
+    p.textContent = text;
+    var row = document.createElement('div');
+    row.className = 'dlg-btns';
+    var cancel = document.createElement('button');
+    cancel.type = 'button';
+    cancel.className = 'dlg-btn ghost';
+    cancel.textContent = '取消';
+    var ok = document.createElement('button');
+    ok.type = 'button';
+    ok.className = 'dlg-btn danger';
+    ok.textContent = okLabel || '确定';
+    row.appendChild(cancel);
+    row.appendChild(ok);
+    body.appendChild(t);
+    body.appendChild(p);
+    body.appendChild(row);
+    var close = function () {
+      try { dlg.close(); } catch (_) {}
+      dlg.removeAttribute('open');
+    };
+    cancel.onclick = close;
+    if (x) x.onclick = close;
+    ok.onclick = function () { close(); if (onOk) onOk(); };
+    try { dlg.showModal(); } catch (_) { dlg.setAttribute('open', ''); }
   },
 
   /* 输入区接线：回车发送、Shift+回车换行、maxlength 200、场景切换、里程碑关闭 */

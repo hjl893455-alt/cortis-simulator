@@ -403,3 +403,15 @@ small.g-ts,.g-bubble small.g-ts{position:absolute;right:10px;bottom:4px;font-siz
 .me-btn{width:100%;border:1px solid var(--pk);background:#fff;color:var(--pk);border-radius:14px;padding:13px;font:600 14px 'Noto Sans SC',sans-serif;cursor:pointer;margin-top:10px}
 .me-btn.danger{border-color:#f0857d;color:#f0857d}
 .me-btn:active{transform:scale(.98)}
+
+/* 自定义确认弹窗 */
+#panel-dialog{position:relative;border:none;border-radius:20px;padding:0;width:min(84vw,320px);box-shadow:0 18px 50px rgba(190,60,110,.28)}
+#panel-dialog::backdrop{background:rgba(60,20,40,.45);backdrop-filter:blur(2px)}
+#panel-dialog .close{position:absolute;top:6px;right:10px;border:none;background:none;font-size:20px;line-height:1;color:#c9a0b4;cursor:pointer;z-index:1}
+#dialog-content{position:relative;padding:26px 22px 20px;text-align:center}
+.dlg-title{margin:0 0 8px;font-size:17px;color:#5b2a41}
+.dlg-text{margin:0 0 18px;font-size:13.5px;line-height:1.6;color:#8a6a7c}
+.dlg-btns{display:flex;gap:10px}
+.dlg-btn{flex:1;border:none;border-radius:12px;padding:11px 0;font-size:15px;cursor:pointer}
+.dlg-btn.ghost{background:#f6ecf1;color:#8a6a7c}
+.dlg-btn.danger{background:linear-gradient(135deg,#ff6b9d,#ff4d7e);color:#fff;font-weight:600}
